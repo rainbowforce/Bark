@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bark 推送记录管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; border-radius: 10px; margin-bottom: 20px; }
+        header h1 { font-size: 28px; margin-bottom: 10px; }
+        .toolbar { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; gap: 15px; flex-wrap: wrap; align-items: center; }
+        .toolbar input, .toolbar select { padding: 10px 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+        .toolbar button { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.3s; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a6fd6; }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-secondary { background: #95a5a6; color: white; }
+        .btn-secondary:hover { background: #7f8c8d; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); text-align: center; }
+        .stat-card .number { font-size: 32px; font-weight: bold; color: #667eea; }
+        .stat-card .label { color: #666; margin-top: 5px; }
+        .records-list { background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); overflow: hidden; }
+        .record-item { padding: 20px; border-bottom: 1px solid #eee; transition: background 0.3s; }
+        .record-item:hover { background: #fafafa; }
+        .record-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        .record-title { font-size: 16px; font-weight: 600; color: #333; }
+        .record-meta { display: flex; gap: 10px; align-items: center; }
+        .group-tag { background: #e3f2fd; color: #1976d2; padding: 3px 10px; border-radius: 12px; font-size: 12px; }
+        .time { color: #999; font-size: 13px; }
+        .record-body { color: #666; line-height: 1.6; }
+        .record-actions { margin-top: 10px; display: flex; gap: 10px; }
+        .record-actions button { padding: 5px 12px; font-size: 12px; }
+        .pagination { display: flex; justify-content: center; gap: 10px; padding: 20px; }
+        .pagination button { padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 6px; cursor: pointer; }
+        .pagination button.active { background: #667eea; color: white; border-color: #667eea; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal.show { display: flex; }
+        .modal-content { background: white; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%; }
+        .modal-content h2 { margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #666; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #999; }
+        .status-badge { padding: 3px 8px; border-radius: 4px; font-size: 12px; }
+        .status-success { background: #d4edda; color: #155724; }
+        .status-failed { background: #f8d7da; color: #721c24; }
+        .status-pending { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Bark 推送记录管理</h1>
+            <p>查看、搜索和管理您的推送历史</p>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="number" id="totalCount">0</div>
+                <div class="label">总记录数</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="todayCount">0</div>
+                <div class="label">今日推送</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="groupCount">0</div>
+                <div class="label">分组数</div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <input type="text" id="searchInput" placeholder="搜索标题或内容...">
+            <select id="groupSelect">
+                <option value="">全部分组</option>
+            </select>
+            <button class="btn-primary" onclick="loadRecords()">搜索</button>
+            <button class="btn-secondary" onclick="openSettings()">设置</button>
+            <button class="btn-danger" onclick="openCleanup()">批量清理</button>
+        </div>
+
+        <div class="records-list" id="recordsList">
+            <div class="empty-state">加载中...</div>
+        </div>
+
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <h2>设置</h2>
+            <div class="form-group">
+                <label>Bark Server 地址</label>
+                <input type="text" id="barkServerUrl" placeholder="http://localhost:8080">
+            </div>
+            <div class="form-group">
+                <label>定期清理 (天)</label>
+                <input type="number" id="cleanupDays" placeholder="30">
+            </div>
+            <div class="form-group">
+                <label>启用自动清理</label>
+                <select id="cleanupEnabled">
+                    <option value="true">是</option>
+                    <option value="false">否</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal('settingsModal')">取消</button>
+                <button class="btn-primary" onclick="saveSettings()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="cleanupModal">
+        <div class="modal-content">
+            <h2>批量清理</h2>
+            <div class="form-group">
+                <label>清理分组</label>
+                <select id="cleanupGroup">
+                    <option value="">全部分组</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>清理时间范围</label>
+                <select id="cleanupRange">
+                    <option value="7">7天前</option>
+                    <option value="30" selected>30天前</option>
+                    <option value="90">90天前</option>
+                    <option value="365">1年前</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal('cleanupModal')">取消</button>
+                <button class="btn-danger" onclick="confirmCleanup()">清理</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let currentSettings = {};
+
+        async function loadRecords() {
+            const search = document.getElementById('searchInput').value;
+            const group = document.getElementById('groupSelect').value;
+            
+            const params = new URLSearchParams({
+                page: currentPage,
+                page_size: 20
+            });
+            if (search) params.append('search', search);
+            if (group) params.append('group', group);
+
+            try {
+                const response = await fetch(`/api/v1/records?${params}`);
+                const data = await response.json();
+                
+                renderRecords(data.records);
+                renderPagination(data.total, data.page, data.page_size);
+                updateStats(data.total, data.groups.length);
+                updateGroupSelect(data.groups);
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('recordsList').innerHTML = '<div class="empty-state">加载失败</div>';
+            }
+        }
+
+        function renderRecords(records) {
+            const container = document.getElementById('recordsList');
+            if (records.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无记录</div>';
+                return;
+            }
+
+            container.innerHTML = records.map(record => {
+                const statusClass = record.status === 1 ? 'status-success' : record.status === 2 ? 'status-failed' : 'status-pending';
+                const statusText = record.status === 1 ? '成功' : record.status === 2 ? '失败' : '待处理';
+                
+                return `
+                    <div class="record-item">
+                        <div class="record-header">
+                            <div>
+                                <span class="record-title">${record.title || record.body?.substring(0, 50) || '无标题'}</span>
+                                ${record.group_name ? `<span class="group-tag">${record.group_name}</span>` : ''}
+                            </div>
+                            <div class="record-meta">
+                                <span class="status-badge ${statusClass}">${statusText}</span>
+                                <span class="time">${formatTime(record.created_at)}</span>
+                            </div>
+                        </div>
+                        ${record.subtitle ? `<div class="record-body"><strong>副标题:</strong> ${record.subtitle}</div>` : ''}
+                        ${record.body ? `<div class="record-body">${record.body}</div>` : ''}
+                        ${record.url ? `<div class="record-body"><a href="${record.url}" target="_blank">${record.url}</a></div>` : ''}
+                        <div class="record-actions">
+                            <button class="btn-danger" onclick="deleteRecord(${record.id})">删除</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderPagination(total, page, pageSize) {
+            const totalPages = Math.ceil(total / pageSize);
+            const container = document.getElementById('pagination');
+            
+            if (totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            html += `<button ${page <= 1 ? 'disabled' : ''} onclick="goToPage(${page - 1})">上一页</button>`;
+            
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= page - 2 && i <= page + 2)) {
+                    html += `<button class="${i === page ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+                } else if (i === page - 3 || i === page + 3) {
+                    html += '<span>...</span>';
+                }
+            }
+            
+            html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="goToPage(${page + 1})">下一页</button>`;
+            container.innerHTML = html;
+        }
+
+        function updateStats(total, groupCount) {
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('groupCount').textContent = groupCount;
+            
+            const today = new Date().toDateString();
+            const todayRecords = document.querySelectorAll('.record-item').filter(item => {
+                const time = item.querySelector('.time').textContent;
+                return time.includes(today);
+            });
+            document.getElementById('todayCount').textContent = todayRecords.length || '0';
+        }
+
+        function updateGroupSelect(groups) {
+            const select = document.getElementById('groupSelect');
+            const cleanupSelect = document.getElementById('cleanupGroup');
+            const currentValue = select.value;
+            const currentCleanupValue = cleanupSelect.value;
+            
+            select.innerHTML = '<option value="">全部分组</option>';
+            cleanupSelect.innerHTML = '<option value="">全部分组</option>';
+            
+            groups.forEach(group => {
+                select.innerHTML += `<option value="${group}">${group}</option>`;
+                cleanupSelect.innerHTML += `<option value="${group}">${group}</option>`;
+            });
+            
+            select.value = currentValue;
+            cleanupSelect.value = currentCleanupValue;
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            loadRecords();
+        }
+
+        async function deleteRecord(id) {
+            if (!confirm('确定要删除这条记录吗？')) return;
+            
+            try {
+                await fetch(`/api/v1/records/${id}`, { method: 'DELETE' });
+                loadRecords();
+            } catch (error) {
+                alert('删除失败');
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/v1/settings');
+                currentSettings = await response.json();
+                
+                document.getElementById('barkServerUrl').value = currentSettings.bark_server_url || '';
+                document.getElementById('cleanupDays').value = currentSettings.cleanup_days || '30';
+                document.getElementById('cleanupEnabled').value = currentSettings.cleanup_enabled || 'true';
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function saveSettings() {
+            const settings = {
+                bark_server_url: document.getElementById('barkServerUrl').value,
+                cleanup_days: document.getElementById('cleanupDays').value,
+                cleanup_enabled: document.getElementById('cleanupEnabled').value
+            };
+
+            try {
+                await fetch('/api/v1/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                closeModal('settingsModal');
+                alert('设置已保存');
+            } catch (error) {
+                alert('保存失败');
+            }
+        }
+
+        async function confirmCleanup() {
+            const days = parseInt(document.getElementById('cleanupRange').value);
+            const group = document.getElementById('cleanupGroup').value;
+            const before = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+            
+            if (!confirm(`确定要清理 ${days} 天前的记录吗？此操作不可恢复！`)) return;
+
+            const params = new URLSearchParams({ before });
+            if (group) params.append('group', group);
+
+            try {
+                const response = await fetch(`/api/v1/records?${params}`, { method: 'DELETE' });
+                const data = await response.json();
+                closeModal('cleanupModal');
+                loadRecords();
+                alert(`已清理 ${data.deleted_count} 条记录`);
+            } catch (error) {
+                alert('清理失败');
+            }
+        }
+
+        function openSettings() {
+            loadSettings();
+            document.getElementById('settingsModal').classList.add('show');
+        }
+
+        function openCleanup() {
+            document.getElementById('cleanupModal').classList.add('show');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('show');
+        }
+
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString('zh-CN');
+        }
+
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                currentPage = 1;
+                loadRecords();
+            }
+        });
+
+        loadRecords();
+    </script>
+</body>
+</html>

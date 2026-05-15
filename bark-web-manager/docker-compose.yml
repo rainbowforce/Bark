@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  bark-web-manager:
+    build: .
+    container_name: bark-web-manager
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - BARK_SERVER_URL=http://bark-server:8080
+    depends_on:
+      - bark-server
+
+  bark-server:
+    image: finab/bark-server
+    container_name: bark-server
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./bark-data:/data
